@@ -1,0 +1,108 @@
+import sys
+from collections import defaultdict
+
+# It's good practice to increase recursion limit for deep trees
+sys.setrecursionlimit(200005)
+
+class CentroidDecomposition:
+    def __init__(self, n, edges):
+        self.n = n
+        self.adj = [[] for _ in range(n)]
+        for u, v in edges:
+            self.adj[u].append(v)
+            self.adj[v].append(u)
+        
+        self.subtree_size = [0] * n
+        self.decomposed = [False] * n
+        self.centroid_parent = [-1] * n
+        
+        self.total_pairs = 0
+        self.K = 0
+
+    def _dfs_size(self, u, p):
+        self.subtree_size[u] = 1
+        for v in self.adj[u]:
+            if v != p and not self.decomposed[v]:
+                self._dfs_size(v, u)
+                self.subtree_size[u] += self.subtree_size[v]
+
+    def _find_centroid(self, u, p, component_size):
+        for v in self.adj[u]:
+            if v != p and not self.decomposed[v] and self.subtree_size[v] * 2 > component_size:
+                return self._find_centroid(v, u, component_size)
+        return u
+
+    def _get_distances(self, u, p, current_dist, distances_list):
+        distances_list.append(current_dist)
+        for v in self.adj[u]:
+            if v != p and not self.decomposed[v]:
+                self._get_distances(v, u, current_dist + 1, distances_list)
+
+    def _decompose(self, u, p_centroid=-1):
+        self._dfs_size(u, -1)
+        centroid = self._find_centroid(u, -1, self.subtree_size[u])
+
+        self.centroid_parent[centroid] = p_centroid
+        
+        dist_counts = defaultdict(int)
+        dist_counts[0] = 1
+        
+        for v in self.adj[centroid]:
+            if not self.decomposed[v]:
+                branch_distances = []
+                self._get_distances(v, centroid, 1, branch_distances)
+                
+                for dist in branch_distances:
+                    if self.K - dist in dist_counts:
+                        self.total_pairs += dist_counts[self.K - dist]
+                
+                for dist in branch_distances:
+                    dist_counts[dist] += 1
+
+        self.decomposed[centroid] = True
+        for v in self.adj[centroid]:
+            if not self.decomposed[v]:
+                self._decompose(v, centroid)
+
+    def solve_count_paths(self, k):
+        self.K = k
+        self.total_pairs = 0
+        self.decomposed = [False] * self.n # Reset decomposed state for new solve
+        self._decompose(0)
+        return self.total_pairs
+
+# --- Corrected Example Usage ---
+
+n_nodes = 16
+# THE FIX IS HERE: The edge (5, 9) which created a cycle has been removed.
+# (9, 8) is a duplicate of (8, 9) and can also be removed for cleanliness.
+edges = [
+    (0, 1), (0, 2), (0, 3),
+    (1, 4), (1, 5),
+    (3, 6),
+    (4, 7),
+    (5, 8), # (5, 9) is removed
+    (7, 11), (7, 12), (7, 13),
+    (9, 8), 
+    (9, 10),
+    (10, 14), (10, 15)
+]
+
+# A cleaner list with no duplicates and no cycle
+clean_edges = [
+    (0, 1), (0, 2), (0, 3), (1, 4), (1, 5), (3, 6), (4, 7),
+    (5, 8), (8, 9), (9, 10), (10, 14), (10, 15),
+    (7, 11), (7, 12), (7, 13)
+]
+
+
+cd_solver = CentroidDecomposition(n_nodes, clean_edges)
+
+K = 3
+result = cd_solver.solve_count_paths(K)
+
+print(f"For K = {K}, found {result} pairs with that exact distance.")
+
+K1_result = cd_solver.solve_count_paths(1)
+print(f"For K = 1, found {K1_result} pairs. (Should be equal to the number of edges)")
+assert K1_result == len(clean_edges)
